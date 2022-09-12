@@ -7,7 +7,10 @@ import com.typesafe.config.{Config, ConfigFactory}
 import javafx.application.{Application, Platform}
 import javafx.scene.Scene
 import javafx.scene.control.{ButtonType, Dialog, DialogPane}
-import javafx.stage.Stage
+import javafx.stage.{Stage, WindowEvent}
+
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
 
 object Launcher {
 
@@ -31,7 +34,10 @@ class Launcher extends Application {
     primaryStage.setScene(new Scene(ctl, 500, 500))
     primaryStage.centerOnScreen()
     primaryStage.show()
-    primaryStage.setOnCloseRequest(_ => shutdownHandler(system))
+    primaryStage.setOnCloseRequest(e => {
+      ctl.setDisable(true) // disabled during system shutdown
+      shutdownGracefully(e, system)
+    })
   }
 
   private def getConfig(settings: Settings): Config = {
@@ -44,9 +50,16 @@ class Launcher extends Application {
     configOverload.withFallback(defaultConfig)
   }
 
-  private def shutdownHandler(system: ActorSystem[NotUsed]): Unit = {
+  private def shutdownGracefully(e: WindowEvent, system: ActorSystem[NotUsed]): Unit = {
+    // here we prevent the stage from closing for now
+    // because this will block the JavaFX thread and the system will not be able to interact with our FxDispatcher (a deadlock has occurred)
+    // so we have to wait for the system to finish on a dedicated thread and exit JavaFX when complete
+    e.consume()
+
+    implicit val ec = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor())
+    system.whenTerminated.onComplete { _ => Platform.exit() }
+
     system.terminate()
-    Platform.exit()
   }
 
   private def promptSettings(): Settings = {
