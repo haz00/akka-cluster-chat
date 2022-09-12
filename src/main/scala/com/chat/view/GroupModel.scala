@@ -21,7 +21,7 @@ class GroupModel(val name: String,
 
   private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
-  private val instToModel = new util.HashMap[ActorRef[Command], ChatterModel]()
+  private val instToModel = mutable.Map.empty[ActorRef[Command], ChatterModel]
   private var self: ActorRef[Command] = _
 
   def defaultBehaviour(): Behavior[Command] = Behaviors.setup { ctx =>
@@ -29,7 +29,6 @@ class GroupModel(val name: String,
     self = ctx.self
 
     val groupKey = ServiceKey[Command](id)
-    var instances = Set.empty[ActorRef[Command]]
 
     val receptionistAdapter: ActorRef[Receptionist.Listing] = ctx.messageAdapter[Receptionist.Listing] {
       case groupKey.Listing(actuals) => InstancesChanged(actuals)
@@ -41,30 +40,29 @@ class GroupModel(val name: String,
     Behaviors.receiveMessage {
 
       case ReceiveMessage(sender, text) =>
-        val model = instToModel.get(sender)
-        if (model != null && model.hasUsername)
-          messages.add(formatMessage(model, text))
+        instToModel.get(sender) match {
+          case Some(model) if model.hasUsername => messages.add(formatMessage(model, text))
+          case _ =>
+        }
         Behaviors.same
 
       case InstancesChanged(actuals) =>
         // remove outdated instances
-        instances.foreach { inst =>
-          if (!actuals.contains(inst)) {
-            instances -= inst
-            chatters.remove(instToModel.remove(inst))
-          }
-        }
-        // add the new ones
-        actuals.foreach { actual =>
-          if (!instances.contains(actual)) {
-            instances += actual
+        instToModel.keys
+          .filterNot(actuals.contains)
+          .toSeq
+          .map(instToModel.remove)
+          .filter(_.isDefined)
+          .map(_.get)
+          .foreach(chatters.remove)
 
-            if (!instToModel.containsKey(actual)) {
-              instToModel.put(actual, new ChatterModel(None, actual, actual == self))
-              actual ! GetInstanceInfo(ctx.self)
-            }
+        // add the new ones
+        actuals
+          .filterNot(instToModel.contains)
+          .foreach { actual =>
+            instToModel.put(actual, new ChatterModel(None, actual, actual == self))
+            actual ! GetInstanceInfo(ctx.self)
           }
-        }
         Behaviors.same
 
       case GetInstanceInfo(replyTo) =>
@@ -72,10 +70,11 @@ class GroupModel(val name: String,
         Behaviors.same
 
       case InstanceInfo(inst, uname) =>
-        val model = instToModel.get(inst)
-        if (model != null && !chatters.contains(model)) {
-          model.username = Some(uname)
-          chatters.add(model)
+        instToModel.get(inst) match {
+          case Some(model) if !chatters.contains(model) =>
+            model.username = Some(uname)
+            chatters.add(model)
+          case _ =>
         }
         Behaviors.same
 

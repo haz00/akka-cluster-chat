@@ -7,7 +7,7 @@ class ChatterModel(var username: Option[String],
                    val receiver: ActorRef[ChatCommand.Command],
                    val isYou: Boolean) {
 
-  def getUsername: String = if (hasUsername) username.get else "undefined"
+  def getUsername: String = username.getOrElse("undefined")
 
   def hasUsername: Boolean = username.isDefined
 

@@ -32,9 +32,7 @@ class GroupView(val model: GroupModel,
 
   bind(model)
 
-  def bind(model: GroupModel): Unit = {
-    lvMessages.getItems.removeListener(autoScrollListener)
-
+  private def bind(model: GroupModel): Unit = {
     lvMessages.setItems(model.messages)
     lvMessages.getItems.addListener(autoScrollListener)
     lvChatters.setItems(model.chatters)

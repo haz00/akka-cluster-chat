@@ -27,7 +27,7 @@ class Launcher extends Application {
     val config = getConfig(settings)
     val system = ActorSystem(ctl.defaultBehaviour(), "chat", config)
 
-    primaryStage.setTitle("Chat")
+    primaryStage.setTitle("Chat - " + settings.username.get())
     primaryStage.setScene(new Scene(ctl, 500, 500))
     primaryStage.centerOnScreen()
     primaryStage.show()
