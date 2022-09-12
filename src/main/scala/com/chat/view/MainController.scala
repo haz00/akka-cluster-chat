@@ -34,7 +34,7 @@ class MainController(val username: String) extends BorderPane {
     val group = new GroupModel("common", "common", this)
     ctx.spawnAnonymous(group.defaultBehaviour(), DispatcherSelector.sameAsParent())
 
-    val mainTab = new Tab(group.name, new GroupView(group, this))
+    val mainTab = new Tab(group.name, new GroupView(group))
     mainTab.setClosable(false)
     tabs.getTabs.add(mainTab)
 
@@ -48,7 +48,7 @@ class MainController(val username: String) extends BorderPane {
   }
 
   private def addDialog(model: GroupModel, other: ActorRef[ChatCommand.Command]): DialogView = {
-    val view = new DialogView(model, this)
+    val view = new DialogView(model)
 
     val tab = new Tab(model.name, view)
     tab.setUserData(other)

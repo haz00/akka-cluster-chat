@@ -2,14 +2,12 @@ package com.chat.view
 
 import akka.actor.typed.ActorRef
 import com.chat.ChatCommand
+import javafx.beans.property.SimpleStringProperty
 
-class ChatterModel(var username: Option[String],
-                   val receiver: ActorRef[ChatCommand.Command],
+class ChatterModel(val receiver: ActorRef[ChatCommand.Command],
                    val isYou: Boolean) {
 
-  def getUsername: String = username.getOrElse("undefined")
+  val username = new SimpleStringProperty("undefined")
 
-  def hasUsername: Boolean = username.isDefined
-
-  override def toString: String = getUsername
+  def getUsername: String = username.get()
 }

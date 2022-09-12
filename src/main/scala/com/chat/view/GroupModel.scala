@@ -6,7 +6,6 @@ import akka.actor.typed.{ActorRef, Behavior}
 import javafx.collections.{FXCollections, ObservableList}
 
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util
 import scala.collection.mutable
 
@@ -16,10 +15,8 @@ class GroupModel(val name: String,
 
   import com.chat.ChatCommand._
 
-  val messages: ObservableList[String] = FXCollections.observableList(new util.ArrayList[String]())
+  val messages: ObservableList[MessageModel] = FXCollections.observableList(new util.ArrayList[MessageModel]())
   val chatters: ObservableList[ChatterModel] = FXCollections.observableList(new util.ArrayList[ChatterModel]())
-
-  private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 
   private val instToModel = mutable.Map.empty[ActorRef[Command], ChatterModel]
   private var self: ActorRef[Command] = _
@@ -41,7 +38,7 @@ class GroupModel(val name: String,
 
       case ReceiveMessage(sender, text) =>
         instToModel.get(sender) match {
-          case Some(model) if model.hasUsername => messages.add(formatMessage(model, text))
+          case Some(model) => messages.add(new MessageModel(model, text, LocalDateTime.now()))
           case _ =>
         }
         Behaviors.same
@@ -60,7 +57,9 @@ class GroupModel(val name: String,
         actuals
           .filterNot(instToModel.contains)
           .foreach { actual =>
-            instToModel.put(actual, new ChatterModel(None, actual, actual == self))
+            val model = new ChatterModel(actual, actual == self)
+            instToModel.put(actual, model)
+            chatters.add(model)
             actual ! GetInstanceInfo(ctx.self)
           }
         Behaviors.same
@@ -71,9 +70,7 @@ class GroupModel(val name: String,
 
       case InstanceInfo(inst, uname) =>
         instToModel.get(inst) match {
-          case Some(model) if !chatters.contains(model) =>
-            model.username = Some(uname)
-            chatters.add(model)
+          case Some(model) => model.username.set(uname)
           case _ =>
         }
         Behaviors.same
@@ -97,13 +94,4 @@ class GroupModel(val name: String,
     ctl.startDialog(self, other)
 
   override def toString: String = name
-
-  private def formatMessage(sender: ChatterModel, text: String): String =
-    new mutable.StringBuilder(if (sender.isYou) "[me] " else "")
-      .append(timeFormatted).append(" ")
-      .append(sender.getUsername).append(": ")
-      .append(text)
-      .toString()
-
-  private def timeFormatted: String = LocalDateTime.now().toLocalTime.format(timeFormatter)
 }
