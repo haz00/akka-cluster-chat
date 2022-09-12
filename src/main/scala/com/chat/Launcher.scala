@@ -57,7 +57,10 @@ class Launcher extends Application {
     e.consume()
 
     implicit val ec = ExecutionContext.fromExecutorService(Executors.newSingleThreadExecutor())
-    system.whenTerminated.onComplete { _ => Platform.exit() }
+    system.whenTerminated.onComplete { _ =>
+      ec.shutdown()
+      Platform.exit()
+    }
 
     system.terminate()
   }
