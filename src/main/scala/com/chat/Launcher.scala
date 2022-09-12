@@ -69,7 +69,7 @@ class Launcher extends Application {
     val model = new Settings()
 
     val dialogPane = new DialogPane()
-    dialogPane.setGraphic(new SettingsView(model))
+    dialogPane.setContent(new SettingsView(model))
     dialogPane.getButtonTypes.add(ButtonType.OK)
 
     val dialog = new Dialog[ButtonType]()
