@@ -4,7 +4,7 @@ import akka.actor.typed.ActorRef
 
 object ChatCommand {
 
-  trait Command
+  trait Command extends CborSerializable
 
   case class InstancesChanged(actuals: Set[ActorRef[Command]]) extends Command
 
