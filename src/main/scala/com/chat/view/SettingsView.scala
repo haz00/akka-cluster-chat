@@ -1,5 +1,6 @@
 package com.chat.view
 
+import javafx.beans.binding.Bindings
 import javafx.beans.property.SimpleStringProperty
 import javafx.scene.control.{Label, TextField}
 import javafx.scene.layout.GridPane
@@ -19,10 +20,13 @@ class SettingsView(val model: Settings) extends GridPane {
 }
 
 final class Settings {
-  var address = new SimpleStringProperty("127.0.0.1:4560")
-  var username = new SimpleStringProperty()
+  val address = new SimpleStringProperty("127.0.0.1:4560")
+  val username = new SimpleStringProperty("")
+  val isUsernameBlank = Bindings.createBooleanBinding(() => username.get().isBlank(), username)
 
-  def host: String = address.get().split(":")(0)
+  def getHost: String = address.get().split(":")(0)
 
-  def port: String = address.get().split(":")(1)
+  def getPort: String = address.get().split(":")(1)
+
+  def getUsername: String = username.get()
 }

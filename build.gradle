@@ -20,6 +20,8 @@ dependencies {
     implementation "com.typesafe.akka:akka-cluster-typed_$scalaBin"
     implementation("com.typesafe.akka:akka-slf4j_$scalaBin")
     implementation("com.typesafe.akka:akka-serialization-jackson_$scalaBin")
+    implementation("com.typesafe.akka:akka-persistence-typed_$scalaBin")
+    implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
     implementation("ch.qos.logback:logback-classic:1.4.0")
 
     testImplementation "junit:junit:4.13.2"
