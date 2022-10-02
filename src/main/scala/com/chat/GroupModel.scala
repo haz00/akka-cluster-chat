@@ -1,7 +1,7 @@
 package com.chat
 
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
-import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 import akka.persistence.typed.{PersistenceId, RecoveryCompleted}
@@ -12,11 +12,12 @@ import javafx.collections.{FXCollections, ObservableList}
 import java.time.LocalDateTime
 import java.util
 import scala.concurrent.duration.DurationInt
+import scala.jdk.OptionConverters.RichOptional
 import scala.util.Success
 
 class GroupModel(val name: String,
                  val id: String,
-                 val ctl: MainController) {
+                 val selfUsername: String) {
 
   val messages: ObservableList[MessageModel] = FXCollections.observableList(new util.ArrayList[MessageModel]())
   val chatters: ObservableList[ChatterModel] = FXCollections.observableList(new util.ArrayList[ChatterModel]())
@@ -24,7 +25,7 @@ class GroupModel(val name: String,
   private var self: ActorRef[Command] = _
   private implicit val timeout: Timeout = Timeout(3.second)
 
-  def defaultBehaviour(): Behavior[Command] = Behaviors.setup { ctx =>
+  def defaultBehaviour(listener: InviteListener): Behavior[Command] = Behaviors.setup { ctx =>
     self = ctx.self
 
     val groupKey = ServiceKey[Command](id)
@@ -39,53 +40,58 @@ class GroupModel(val name: String,
     EventSourcedBehavior[Command, Event, GroupState](
       persistenceId = PersistenceId.ofUniqueId(id),
       emptyState = GroupState(List.empty),
-      commandHandler = (state, cmd) => {
-        cmd match {
-          case ReceiveMessage(sender, text) =>
-            val msg = Message(sender, text, LocalDateTime.now(), sender == ctl.username)
-            Effect
-              .persist(AddMessage(msg))
-              .thenRun { _ => addMessage(msg) }
-
-          case InstancesChanged(actuals) =>
-            Effect.none.thenRun { _ =>
-              actuals.foreach { actual =>
-                ctx.ask(actual, GetInstanceInfo.apply) {
-                  case Success(info) => AddChatter(info.receiver, info.username)
-                }
-              }
-            }
-
-          case GetInstanceInfo(replyTo) =>
-            Effect.reply(replyTo)(InstanceInfo(ctx.self, ctl.username))
-
-          case AddChatter(receiver, username) =>
-            Effect.none.thenRun { _ =>
-              if (chatters.stream().noneMatch(_.receiver == receiver)) {
-                chatters.add(new ChatterModel(receiver, username, receiver == ctx.self))
-                ctx.watchWith(receiver, RemoveChatter(receiver))
-              }
-            }
-
-          case msg: JoinToDialog =>
-            Effect.none.thenRun { _ => ctl.joinDialog(msg.groupId, msg.otherUsername) }
-
-          case RemoveChatter(receiver) =>
-            Effect.none.thenRun { _ => chatters.removeIf(_.receiver == receiver) }
-
-          case Dispose => Effect.stop().thenStop()
-        }
-      },
-      eventHandler = (state, event) => {
-        event match {
-          case e: AddMessage => state.addMessage(e.msg)
-        }
-      }
+      commandHandler = (state, cmd) => handleCommand(ctx, state, cmd, listener),
+      eventHandler = (state, event) => handleEvent(ctx, state, event)
     ).receiveSignal {
-      case (state, RecoveryCompleted) => state.messages.reverse.foreach(addMessage)
+      case (state, RecoveryCompleted) => state.messagesOrdered.foreach(addMessage)
       case _ =>
     }
   }
+
+  private def handleCommand(ctx: ActorContext[Command],
+                            state: GroupState,
+                            cmd: Command,
+                            listener: InviteListener): Effect[Event, GroupState] =
+    cmd match {
+      case ReceiveMessage(sender, text) =>
+        val msg = Message(sender, text, LocalDateTime.now(), sender == selfUsername)
+        Effect
+          .persist(AddMessage(msg))
+          .thenRun { _ => addMessage(msg) }
+
+      case InstancesChanged(actuals) =>
+        Effect.none.thenRun { _ =>
+          actuals.foreach { actual =>
+            ctx.ask(actual, GetInstanceInfo.apply) {
+              case Success(info) => AddChatter(info.receiver, info.username)
+            }
+          }
+        }
+
+      case GetInstanceInfo(replyTo) =>
+        Effect.reply(replyTo)(InstanceInfo(ctx.self, selfUsername))
+
+      case AddChatter(receiver, username) =>
+        Effect.none.thenRun { _ =>
+          if (chatters.stream().noneMatch(_.receiver == receiver)) {
+            chatters.add(new ChatterModel(receiver, username, receiver == ctx.self))
+            ctx.watchWith(receiver, RemoveChatter(receiver))
+          }
+        }
+
+      case msg: JoinToDialog =>
+        Effect.none.thenRun { _ => listener.onInvite(msg.groupId, msg.otherUsername) }
+
+      case RemoveChatter(receiver) =>
+        Effect.none.thenRun { _ => chatters.removeIf(_.receiver == receiver) }
+
+      case Dispose => Effect.stop().thenStop()
+    }
+
+  private def handleEvent(ctx: ActorContext[Command], state: GroupState, event: Event): GroupState =
+    event match {
+      case e: AddMessage => state.addMessage(e.msg)
+    }
 
   private def addMessage(msg: Message): Unit =
     messages.add(new MessageModel(msg.username, msg.text, msg.time, msg.self))
@@ -94,13 +100,17 @@ class GroupModel(val name: String,
     self ! Dispose
 
   def sendMessage(text: String): Unit =
-    chatters.forEach(_.receiver ! ReceiveMessage(ctl.username, text))
+    chatters.forEach(_.receiver ! ReceiveMessage(selfUsername, text))
 
-  def startDialog(other: ChatterModel): Unit =
+  def getSelf: Option[ChatterModel] =
     chatters.stream()
       .filter(_.receiver == self)
       .findFirst()
-      .ifPresent(self => ctl.startDialog(self, other))
+      .toScala
+}
+
+trait InviteListener {
+  def onInvite(groupId: String, otherUsername: String): Unit
 }
 
 object GroupModel {
@@ -131,7 +141,9 @@ object GroupModel {
 case class GroupState(messages: List[Message]) {
 
   def addMessage(msg: Message): GroupState =
-    copy(messages = msg :: messages)
+    copy(msg :: messages)
+
+  def messagesOrdered: List[Message] = messages.reverse
 }
 
 case class Message(username: String, text: String, time: LocalDateTime, self: Boolean)

@@ -28,6 +28,8 @@ class GroupView(val model: GroupModel) extends BorderPane {
     }
   }
 
+  var onOpenDialog: ChatterModel => Unit = { other => }
+
   setCenter(new VBox(lvMessages, txtInput))
   setRight(lvChatters)
 
@@ -55,7 +57,7 @@ class GroupView(val model: GroupModel) extends BorderPane {
   }
 
   private def handleDialogMenu(e: ActionEvent): Unit =
-    model.startDialog(lvChatters.getSelectionModel.getSelectedItem)
+    onOpenDialog(lvChatters.getSelectionModel.getSelectedItem)
 
   private class ChatterListCell extends ListCell[ChatterModel] {
 

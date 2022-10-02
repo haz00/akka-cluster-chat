@@ -14,14 +14,14 @@ import javafx.scene.layout.BorderPane
 import java.util.UUID
 import scala.jdk.CollectionConverters.ListHasAsScala
 
-class MainController(val username: String, val dispatcher: DispatcherSelector) extends BorderPane {
+class MainController(val username: String) extends BorderPane {
 
   private var self: ActorRef[Command] = _
 
   private val tabs = new TabPane()
   setCenter(tabs)
 
-  def defaultBehaviour(): Behavior[NotUsed] = Behaviors.setup { ctx =>
+  def defaultBehaviour(dispatcher: DispatcherSelector): Behavior[NotUsed] = Behaviors.setup { ctx =>
     Cluster(ctx.system)
     ctx.spawn(running(), "fxBehaviour", dispatcher)
     Behaviors.empty
@@ -33,10 +33,13 @@ class MainController(val username: String, val dispatcher: DispatcherSelector) e
     self = ctx.self
 
     // create default group
-    val group = new GroupModel("common", "common", this)
-    ctx.spawnAnonymous(group.defaultBehaviour(), DispatcherSelector.sameAsParent())
+    val group = new GroupModel("common", "common", username)
+    ctx.spawnAnonymous(group.defaultBehaviour(joinToDialog), DispatcherSelector.sameAsParent())
 
-    val mainTab = new Tab(group.name, new GroupView(group))
+    val groupView = new GroupView(group)
+    groupView.onOpenDialog = { other => group.getSelf.map(openDialog(_, other)) }
+
+    val mainTab = new Tab(group.name, groupView)
     mainTab.setClosable(false)
     tabs.getTabs.add(mainTab)
 
@@ -65,8 +68,8 @@ class MainController(val username: String, val dispatcher: DispatcherSelector) e
     }
 
   private def addDialog(ctx: ActorContext[Command], dialog: Dialogue): Unit = {
-    val model = new GroupModel(s"[${dialog.otherUsername}]", dialog.id, this)
-    val ref = ctx.spawnAnonymous(model.defaultBehaviour(), DispatcherSelector.sameAsParent())
+    val model = new GroupModel(s"[${dialog.otherUsername}]", dialog.id, username)
+    val ref = ctx.spawnAnonymous(model.defaultBehaviour(joinToDialog), DispatcherSelector.sameAsParent())
     ctx.watchWith(ref, RemoveDialog(dialog.id))
 
     val view = new DialogView(model)
@@ -79,9 +82,8 @@ class MainController(val username: String, val dispatcher: DispatcherSelector) e
     tabs.getSelectionModel.select(tab)
   }
 
-  def startDialog(self: ChatterModel, other: ChatterModel): Unit = {
-    if (other.isYou)
-      return
+  private def openDialog(self: ChatterModel, other: ChatterModel): Unit = {
+    if (other.isYou) return
 
     findDialogByUsername(other.username) match {
       case Some(exist) => tabs.getSelectionModel.select(exist)
@@ -93,8 +95,8 @@ class MainController(val username: String, val dispatcher: DispatcherSelector) e
     }
   }
 
-  def joinDialog(id: String, otherUsername: String): Unit =
-    self ! AddDialog(Dialogue(id, otherUsername))
+  private def joinToDialog(groupId: String, otherUsername: String): Unit =
+    self ! AddDialog(Dialogue(groupId, otherUsername))
 
   private def findDialogByUsername(username: String): Option[Tab] =
     tabs.getTabs.asScala.collectFirst { case t if t.getUserData == username => t }

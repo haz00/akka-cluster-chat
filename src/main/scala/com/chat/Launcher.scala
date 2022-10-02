@@ -5,7 +5,6 @@ import com.chat.view.{Settings, SettingsView}
 import com.typesafe.config.{Config, ConfigFactory}
 import javafx.application.{Application, Platform}
 import javafx.scene.Scene
-import javafx.scene.control.{ButtonType, Dialog, DialogPane}
 import javafx.stage.Stage
 
 import java.util.concurrent.Executors
@@ -24,24 +23,26 @@ class Launcher extends Application {
 
   override def start(primaryStage: Stage): Unit = {
 
-    val settings = promptSettings()
-    val config = getConfig(settings)
+    SettingsView.promptSettings("127.0.0.1:4560") match {
+      case None => Platform.exit()
+      case Some(settings) =>
+        val ctl = new MainController(settings.getUsername)
 
-    val javafxDispatcher = DispatcherSelector.fromConfig("javafx-dispatcher")
-    val ctl = new MainController(settings.getUsername, javafxDispatcher)
+        val config = getConfig(settings)
+        val javafxDispatcher = DispatcherSelector.fromConfig("javafx-dispatcher")
+        val system = ActorSystem(ctl.defaultBehaviour(javafxDispatcher), "chat", config)
+        system.whenTerminated.onComplete { _ => Platform.exit() }(shutdownService)
 
-    val system = ActorSystem(ctl.defaultBehaviour(), "chat", config)
-    system.whenTerminated.onComplete { _ => Platform.exit() }(shutdownService)
-
-    primaryStage.setTitle(s"[${system.address.hostPort}] ${settings.getUsername}")
-    primaryStage.setScene(new Scene(ctl, 500, 500))
-    primaryStage.centerOnScreen()
-    primaryStage.show()
-    primaryStage.setOnCloseRequest(e => {
-      e.consume()
-      ctl.setDisable(true) // disabled during system shutdown
-      system.terminate()
-    })
+        primaryStage.setTitle(s"[${system.address.hostPort}] ${settings.getUsername}")
+        primaryStage.setScene(new Scene(ctl, 500, 500))
+        primaryStage.centerOnScreen()
+        primaryStage.show()
+        primaryStage.setOnCloseRequest(e => {
+          e.consume()
+          ctl.setDisable(true) // disabled during system shutdown
+          system.terminate()
+        })
+    }
   }
 
   override def stop(): Unit = shutdownService.shutdown()
@@ -55,21 +56,5 @@ class Launcher extends Application {
     akka.persistence.journal.leveldb.dir = journal/${settings.getUsername}
     """)
     configOverload.withFallback(defaultConfig)
-  }
-
-  private def promptSettings(): Settings = {
-    val model = new Settings()
-
-    val dialogPane = new DialogPane()
-    dialogPane.setContent(new SettingsView(model))
-    dialogPane.getButtonTypes.add(ButtonType.OK)
-    dialogPane.lookupButton(ButtonType.OK).disableProperty().bind(model.isUsernameBlank)
-
-    val dialog = new Dialog[ButtonType]()
-    dialog.setTitle("Settings")
-    dialog.setDialogPane(dialogPane)
-    dialog.showAndWait().orElseThrow()
-
-    model
   }
 }
