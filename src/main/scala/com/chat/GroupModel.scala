@@ -38,7 +38,7 @@ class GroupModel(val name: String,
 
     EventSourcedBehavior[Command, Event, GroupState](
       persistenceId = PersistenceId.ofUniqueId(id),
-      emptyState = GroupState(Vector.empty),
+      emptyState = GroupState(List.empty),
       commandHandler = (state, cmd) => {
         cmd match {
           case ReceiveMessage(sender, text) =>
@@ -82,7 +82,7 @@ class GroupModel(val name: String,
         }
       }
     ).receiveSignal {
-      case (state, RecoveryCompleted) => state.messages.foreach(addMessage)
+      case (state, RecoveryCompleted) => state.messages.reverse.foreach(addMessage)
       case _ =>
     }
   }
@@ -128,10 +128,10 @@ object GroupModel {
   private case object Dispose extends Command
 }
 
-case class GroupState(messages: Vector[Message]) {
+case class GroupState(messages: List[Message]) {
 
   def addMessage(msg: Message): GroupState =
-    copy(messages = messages :+ msg)
+    copy(messages = msg :: messages)
 }
 
 case class Message(username: String, text: String, time: LocalDateTime, self: Boolean)

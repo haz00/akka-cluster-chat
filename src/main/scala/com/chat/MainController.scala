@@ -42,7 +42,7 @@ class MainController(val username: String, val dispatcher: DispatcherSelector) e
 
     EventSourcedBehavior[Command, Event, MainState](
       persistenceId = PersistenceId.ofUniqueId("main"),
-      emptyState = MainState(Vector.empty),
+      emptyState = MainState(List.empty),
       commandHandler = (state, cmd) => handleCommand(ctx, state, cmd),
       eventHandler = (state, event) => handleEvent(ctx, state, event)
     ).receiveSignal {
@@ -111,9 +111,9 @@ object MainController {
   private case class RemoveDialog(id: String) extends Command with Event
 }
 
-case class MainState(dialogs: Vector[Dialogue]) {
+case class MainState(dialogs: List[Dialogue]) {
 
-  def addDialog(dialog: Dialogue): MainState = copy(dialogs :+ dialog)
+  def addDialog(dialog: Dialogue): MainState = copy(dialog :: dialogs)
 
   def removeDialog(id: String): MainState = copy(dialogs.filter(_.id != id))
 }
